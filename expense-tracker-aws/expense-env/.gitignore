@@ -1,34 +1,73 @@
+# Environment variables - NEVER commit these!
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.backup
+
+# AWS credentials
+.aws/
+*.pem
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # Virtual Environment
 expense_env/
-expense-env/
 venv/
 ENV/
 env/
 .venv/
 
-# Environment variables
-.env
-.env.local
-
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+
+# Testing
+.coverage
+.pytest_cache/
+.tox/
+.nox/
 
 # Logs
 *.log
+logs/
 
-# AWS
-.aws/
-
-# Nested project folders (prevent this issue)
-expense-tracker-aws/
+# Temporary files
+*.tmp
+*.temp
