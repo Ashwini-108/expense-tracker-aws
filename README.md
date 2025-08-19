@@ -2,43 +2,52 @@
 
 A command-line expense tracking application that stores data in AWS S3 and logs activities to CloudWatch.
 
-## ✨ Features
+## ✅ Currently Working Features
 
-- **Add expenses** with description, amount, and category
-- **View expenses** with optional category filtering
-- **Delete expenses** by ID
-- **Expense summaries** with statistics and recent activity
-- **Cloud storage** with AWS S3 for data persistence
-- **Activity logging** with AWS CloudWatch for monitoring
-- **Automated testing** and deployment with GitHub Actions
+- ✅ **Add expenses** with description, amount, and category
+- ✅ **View expenses** with optional category filtering  
+- ✅ **Delete expenses** by ID
+- ✅ **Expense summaries** with statistics and recent activity
+- ✅ **Cloud storage** with AWS S3 for data persistence
+- ✅ **Activity logging** with AWS CloudWatch for monitoring
+- ✅ **Automated testing** and deployment with GitHub Actions
+
+## 📊 Current Status
+
+**Application Status:** ✅ WORKING  
+**AWS S3 Connection:** ✅ CONNECTED  
+**CloudWatch Logging:** ✅ CONNECTED  
+**Total Expenses Tracked:** 5 expenses ($26.00)
 
 ## 🛠️ Tech Stack
 
 - **Python 3.8+** - Core application
-- **AWS S3** - Data storage
+- **AWS S3** - Data storage (bucket: expense-tracker-ashwini-4)
 - **AWS CloudWatch** - Activity logging
 - **Click** - CLI framework
 - **Boto3** - AWS SDK
 - **Pytest** - Testing framework
 - **GitHub Actions** - CI/CD pipeline
 
-## 🚀 Installation
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.8+
+- AWS Account with S3 and CloudWatch access
+- Git
+
+### Installation
 
 1. **Clone the repository:**
    ```bash
-   git clone <your-repo-url>
-   cd expense-tracker
+   git clone https://github.com/Ashwini-108/expense-tracker-aws.git
+   cd expense-tracker-s3
    ```
 
-2. **Create and activate virtual environment:**
+2. **Set up virtual environment:**
    ```bash
    python -m venv expense_env
-   
-   # Windows
-   expense_env\Scripts\activate
-   
-   # Mac/Linux
-   source expense_env/bin/activate
+   expense_env\Scripts\Activate.ps1  # Windows
    ```
 
 3. **Install dependencies:**
@@ -46,15 +55,104 @@ A command-line expense tracking application that stores data in AWS S3 and logs 
    pip install -r requirements.txt
    ```
 
-4. **Set up environment variables:**
-   Create a `.env` file with your AWS credentials:
-   ```bash
+4. **Configure AWS credentials:**
+   Create `.env` file:
+   ```
    AWS_ACCESS_KEY_ID=your_access_key_here
    AWS_SECRET_ACCESS_KEY=your_secret_key_here
    AWS_REGION=us-east-1
-   S3_BUCKET_NAME=your-bucket-name-here
+   S3_BUCKET_NAME=expense-tracker-ashwini-4
    CLOUDWATCH_LOG_GROUP=expense-tracker-logs
    ```
+
+## 📊 Usage Examples
+
+### Test AWS Connection
+```bash
+python src\expense_tracker.py test
+```
+
+### Add Expenses
+```bash
+python src\expense_tracker.py add "Coffee" 4.50 --category Food
+python src\expense_tracker.py add "Bus fare" 3.25 --category Transport
+```
+
+### View Expenses
+```bash
+# View all expenses
+python src\expense_tracker.py view
+
+# View by category
+python src\expense_tracker.py view --category Food
+```
+
+### Get Summary
+```bash
+python src\expense_tracker.py summary
+```
+
+### Delete Expense
+```bash
+python src\expense_tracker.py delete 1
+```
+
+## 📁 Project Structure
+
+```
+expense-tracker-s3/
+├── src/
+│   ├── expense_tracker.py      # Main application
+│   └── aws_client.py           # AWS integration
+├── tests/
+│   └── test_expense_tracker.py # Test suite
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml           # CI/CD pipeline
+├── requirements.txt            # Dependencies
+├── .env                        # AWS credentials
+└── README.md                   # Documentation
+```
+
+## 🔍 Monitoring
+
+- **AWS S3:** `s3://expense-tracker-ashwini-4/expenses/default/`
+- **CloudWatch Logs:** `/aws/lambda/expense-tracker-logs`
+- **GitHub Actions:** Repository → Actions tab
+
+## 📈 Current Data
+
+The application currently tracks:
+- **5 expenses** totaling **$26.00**
+- Categories: Food, Transport, Test
+- All data stored securely in AWS S3
+- All activities logged to CloudWatch
+
+## 🧪 Testing
+
+```bash
+# Run tests
+python -m pytest tests/ -v
+
+# Test with coverage
+python -m pytest tests/ --cov=src
+```
+
+## 🚀 CI/CD Pipeline
+
+Automated GitHub Actions workflow includes:
+- Code linting with flake8
+- Security scanning with bandit
+- Automated testing with pytest
+- Build and deployment
+
+## 👨‍💻 Author
+
+Created by Ashwini-108 as part of AWS learning project.
+
+## 📄 License
+
+MIT License - feel free to use and modify!
 
 ## 📊 Usage
 
