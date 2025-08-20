@@ -21,7 +21,7 @@ class TestAWSClient:
     @patch('boto3.client')
     @patch.dict(os.environ, {
         'AWS_REGION': 'us-east-1',
-        'S3_BUCKET_NAME': 'test-bucket',
+        'S3_BUCKET_NAME': 'expense-tracker-ashwini-4',
         'CLOUDWATCH_LOG_GROUP': 'test-logs'
     })
     def test_aws_client_init_success(self, mock_boto3):
@@ -36,7 +36,7 @@ class TestAWSClient:
         
         client = AWSClient()
         
-        assert client.s3_bucket == 'test-bucket'
+        assert client.s3_bucket == 'expense-tracker-ashwini-4'
         assert client.aws_region == 'us-east-1'
         assert client.log_group == 'test-logs'
     
@@ -50,7 +50,7 @@ class TestAWSClient:
     @patch('boto3.client')
     @patch.dict(os.environ, {
         'AWS_REGION': 'us-east-1',
-        'S3_BUCKET_NAME': 'test-bucket',
+        'S3_BUCKET_NAME': 'expense-tracker-ashwini-4',
         'CLOUDWATCH_LOG_GROUP': 'test-logs'
     })
     def test_upload_expenses_success(self, mock_boto3):
@@ -79,7 +79,7 @@ class TestAWSClient:
     @patch('boto3.client')
     @patch.dict(os.environ, {
         'AWS_REGION': 'us-east-1',
-        'S3_BUCKET_NAME': 'test-bucket',
+        'S3_BUCKET_NAME': 'expense-tracker-ashwini-4',
         'CLOUDWATCH_LOG_GROUP': 'test-logs'
     })
     def test_download_expenses_success(self, mock_boto3):
@@ -108,7 +108,7 @@ class TestAWSClient:
     @patch('boto3.client')
     @patch.dict(os.environ, {
         'AWS_REGION': 'us-east-1',
-        'S3_BUCKET_NAME': 'test-bucket',
+        'S3_BUCKET_NAME': 'expense-tracker-ashwini-4',
         'CLOUDWATCH_LOG_GROUP': 'test-logs'
     })
     def test_download_expenses_no_file(self, mock_boto3):
@@ -133,4 +133,191 @@ class TestAWSClient:
 
 
 class TestExpenseTracker:
-    """Test Expense Tracker functionality
+    """Test Expense Tracker functionality"""
+    
+    @patch('src.expense_tracker.AWSClient')
+    @patch('src.expense_tracker.load_dotenv')
+    def test_expense_tracker_init_success(self, mock_load_dotenv, mock_aws_client):
+        """Test successful ExpenseTracker initialization"""
+        # Mock AWS client
+        mock_client_instance = Mock()
+        mock_client_instance.download_expenses_from_s3.return_value = []
+        mock_aws_client.return_value = mock_client_instance
+        
+        tracker = ExpenseTracker()
+        
+        assert tracker.user_id == "default"
+        assert tracker.expenses == []
+        mock_load_dotenv.assert_called_once()
+    
+    @patch('src.expense_tracker.AWSClient')
+    @patch('src.expense_tracker.load_dotenv')
+    def test_add_expense_success(self, mock_load_dotenv, mock_aws_client):
+        """Test adding expense successfully"""
+        # Mock AWS client
+        mock_client_instance = Mock()
+        mock_client_instance.download_expenses_from_s3.return_value = []
+        mock_client_instance.upload_expenses_to_s3.return_value = True
+        mock_aws_client.return_value = mock_client_instance
+        
+        tracker = ExpenseTracker()
+        
+        result = tracker.add_expense("Coffee", 4.50, "Food")
+        
+        assert result is True
+        assert len(tracker.expenses) == 1
+        assert tracker.expenses[0]['description'] == "Coffee"
+        assert tracker.expenses[0]['amount'] == 4.50
+        assert tracker.expenses[0]['category'] == "Food"
+        mock_client_instance.upload_expenses_to_s3.assert_called_once()
+    
+    @patch('src.expense_tracker.AWSClient')
+    @patch('src.expense_tracker.load_dotenv')
+    def test_add_expense_invalid_amount(self, mock_load_dotenv, mock_aws_client):
+        """Test adding expense with invalid amount"""
+        # Mock AWS client
+        mock_client_instance = Mock()
+        mock_client_instance.download_expenses_from_s3.return_value = []
+        mock_aws_client.return_value = mock_client_instance
+        
+        tracker = ExpenseTracker()
+        
+        result = tracker.add_expense("Coffee", -5.0, "Food")
+        
+        assert result is False
+        assert len(tracker.expenses) == 0
+    
+    @patch('src.expense_tracker.AWSClient')
+    @patch('src.expense_tracker.load_dotenv')
+    def test_add_expense_empty_description(self, mock_load_dotenv, mock_aws_client):
+        """Test adding expense with empty description"""
+        # Mock AWS client
+        mock_client_instance = Mock()
+        mock_client_instance.download_expenses_from_s3.return_value = []
+        mock_aws_client.return_value = mock_client_instance
+        
+        tracker = ExpenseTracker()
+        
+        result = tracker.add_expense("", 4.50, "Food")
+        
+        assert result is False
+        assert len(tracker.expenses) == 0
+    
+    @patch('src.expense_tracker.AWSClient')
+    @patch('src.expense_tracker.load_dotenv')
+    def test_delete_expense_success(self, mock_load_dotenv, mock_aws_client):
+        """Test deleting expense successfully"""
+        # Mock AWS client
+        mock_client_instance = Mock()
+        existing_expenses = [
+            {'id': 1, 'description': 'Coffee', 'amount': 4.50, 'category': 'Food'}
+        ]
+        mock_client_instance.download_expenses_from_s3.return_value = existing_expenses
+        mock_client_instance.upload_expenses_to_s3.return_value = True
+        mock_aws_client.return_value = mock_client_instance
+        
+        tracker = ExpenseTracker()
+        
+        result = tracker.delete_expense(1)
+        
+        assert result is True
+        assert len(tracker.expenses) == 0
+        mock_client_instance.upload_expenses_to_s3.assert_called()
+    
+    @patch('src.expense_tracker.AWSClient')
+    @patch('src.expense_tracker.load_dotenv')
+    def test_delete_expense_not_found(self, mock_load_dotenv, mock_aws_client):
+        """Test deleting non-existent expense"""
+        # Mock AWS client
+        mock_client_instance = Mock()
+        mock_client_instance.download_expenses_from_s3.return_value = []
+        mock_aws_client.return_value = mock_client_instance
+        
+        tracker = ExpenseTracker()
+        
+        result = tracker.delete_expense(999)
+        
+        assert result is False
+    
+    @patch('src.expense_tracker.AWSClient')
+    @patch('src.expense_tracker.load_dotenv')
+    def test_get_expense_summary(self, mock_load_dotenv, mock_aws_client):
+        """Test getting expense summary"""
+        # Mock AWS client with existing expenses
+        mock_client_instance = Mock()
+        existing_expenses = [
+            {'id': 1, 'description': 'Coffee', 'amount': 4.50, 'category': 'Food', 'created_at': '2024-01-01T12:00:00'},
+            {'id': 2, 'description': 'Gas', 'amount': 45.00, 'category': 'Transport', 'created_at': '2024-01-02T12:00:00'},
+            {'id': 3, 'description': 'Lunch', 'amount': 12.00, 'category': 'Food', 'created_at': '2024-01-03T12:00:00'}
+        ]
+        mock_client_instance.download_expenses_from_s3.return_value = existing_expenses
+        mock_aws_client.return_value = mock_client_instance
+        
+        tracker = ExpenseTracker()
+        summary = tracker.get_expense_summary()
+        
+        assert summary['total_expenses'] == 3
+        assert summary['total_amount'] == 61.50
+        assert 'Food' in summary['categories']
+        assert 'Transport' in summary['categories']
+        assert summary['categories']['Food']['count'] == 2
+        assert summary['categories']['Food']['amount'] == 16.50
+        assert len(summary['recent_expenses']) == 3
+    
+    @patch('src.expense_tracker.AWSClient')
+    @patch('src.expense_tracker.load_dotenv')
+    def test_get_expense_summary_empty(self, mock_load_dotenv, mock_aws_client):
+        """Test getting summary with no expenses"""
+        # Mock AWS client
+        mock_client_instance = Mock()
+        mock_client_instance.download_expenses_from_s3.return_value = []
+        mock_aws_client.return_value = mock_client_instance
+        
+        tracker = ExpenseTracker()
+        summary = tracker.get_expense_summary()
+        
+        assert summary['total_expenses'] == 0
+        assert summary['total_amount'] == 0
+        assert summary['categories'] == {}
+        assert summary['recent_expenses'] == []
+
+
+# Integration tests
+class TestIntegration:
+    """Integration tests for the complete flow"""
+    
+    @patch('src.expense_tracker.AWSClient')
+    @patch('src.expense_tracker.load_dotenv')
+    def test_complete_expense_workflow(self, mock_load_dotenv, mock_aws_client):
+        """Test complete workflow: add, view, delete expenses"""
+        # Mock AWS client
+        mock_client_instance = Mock()
+        mock_client_instance.download_expenses_from_s3.return_value = []
+        mock_client_instance.upload_expenses_to_s3.return_value = True
+        mock_aws_client.return_value = mock_client_instance
+        
+        tracker = ExpenseTracker()
+        
+        # Add multiple expenses
+        assert tracker.add_expense("Coffee", 4.50, "Food") is True
+        assert tracker.add_expense("Gas", 45.00, "Transport") is True
+        assert tracker.add_expense("Movie", 12.00, "Entertainment") is True
+        
+        # Check expenses were added
+        assert len(tracker.expenses) == 3
+        
+        # Get summary
+        summary = tracker.get_expense_summary()
+        assert summary['total_expenses'] == 3
+        assert summary['total_amount'] == 61.50
+        
+        # Delete an expense
+        assert tracker.delete_expense(1) is True
+        assert len(tracker.expenses) == 2
+        
+        # Verify upload was called for each operation
+        assert mock_client_instance.upload_expenses_to_s3.call_count == 4  # 3 adds + 1 delete
+
+
+if __name__ == '__main__':
+    pytest.main(['-v', __file__])
