@@ -3,11 +3,11 @@ import json
 import csv
 from datetime import datetime, timedelta
 from typing import Dict, Optional
-import boto3
-from botocore.exceptions import ClientError
+
+
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
+
 
 # Module level imports should be at the top
 from aws_client import AWSClient
