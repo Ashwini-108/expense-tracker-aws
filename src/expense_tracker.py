@@ -19,7 +19,12 @@ class ExpenseTracker:
         self.cost_explorer = AWSClient(region_name=aws_region)
         self.expenses_data = []
 
-    def add_manual_expense(self, amount: float, category: str, description: str, date: str = None) -> bool:
+    def add_manual_expense(
+            self,
+            amount: float,
+            category: str,
+            description: str,
+            date: str = None) -> bool:
         """
         Add a manual expense entry.
 
@@ -35,7 +40,12 @@ class ExpenseTracker:
         if date is None:
             date = datetime.now().strftime("%Y-%m-%d")
 
-        expense = {"date": date, "amount": amount, "category": category, "description": description, "source": "manual"}
+        expense = {
+            "date": date,
+            "amount": amount,
+            "category": category,
+            "description": description,
+            "source": "manual"}
 
         self.expenses_data.append(expense)
         return True
@@ -89,12 +99,16 @@ class ExpenseTracker:
                 processed["service_costs"][service] += cost
                 daily_total += cost
 
-            processed["daily_costs"].append({"date": date, "amount": daily_total})
+            processed["daily_costs"].append(
+                {"date": date, "amount": daily_total})
             processed["total_cost"] += daily_total
 
         return processed
 
-    def generate_expense_report(self, output_format: str = "json", filename: str = None) -> str:
+    def generate_expense_report(
+            self,
+            output_format: str = "json",
+            filename: str = None) -> str:
         """
         Generate an expense report.
 
@@ -121,7 +135,8 @@ class ExpenseTracker:
                     # Create empty CSV with headers
                     with open(filename, "w", newline="") as f:
                         writer = csv.writer(f)
-                        writer.writerow(["date", "amount", "category", "description", "source"])
+                        writer.writerow(
+                            ["date", "amount", "category", "description", "source"])
 
             return filename
 
@@ -140,9 +155,11 @@ class ExpenseTracker:
 
         analysis = {
             "total_expenses": df["amount"].sum(),
-            "average_daily_spend": df.groupby(df["date"].dt.date)["amount"].sum().mean(),
+            "average_daily_spend": df.groupby(
+                df["date"].dt.date)["amount"].sum().mean(),
             "category_breakdown": df.groupby("category")["amount"].sum().to_dict(),
-            "highest_expense_day": df.groupby(df["date"].dt.date)["amount"].sum().idxmax(),
+            "highest_expense_day": df.groupby(
+                df["date"].dt.date)["amount"].sum().idxmax(),
             "expense_trend": self._calculate_trend(df),
         }
 
@@ -164,7 +181,10 @@ class ExpenseTracker:
         else:
             return "stable"
 
-    def create_visualization(self, chart_type: str = "daily", save_path: str = None):
+    def create_visualization(
+            self,
+            chart_type: str = "daily",
+            save_path: str = None):
         """
         Create visualizations of expense data.
 
@@ -192,10 +212,14 @@ class ExpenseTracker:
 
         elif chart_type == "category":
             category_totals = df.groupby("category")["amount"].sum()
-            plt.pie(category_totals.values, labels=category_totals.index, autopct="%1.1f%%")
+            plt.pie(
+                category_totals.values,
+                labels=category_totals.index,
+                autopct="%1.1f%%")
             plt.title("Expenses by Category")
 
         elif chart_type == "trend":
-            df_monthly = df.groupby(df["date"].dt.to_period("M"))["amount"].sum()
+            df_monthly = df.groupby(
+                df["date"].dt.to_period("M"))["amount"].sum()
             plt.bar(range(len(df_monthly)), df_monthly.values)
             plt.title("Monthly Expense Trends")

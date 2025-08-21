@@ -1,9 +1,8 @@
 # aws_client.py - Fixed version
 import boto3
-
 from typing import Dict, List
-
 from botocore.exceptions import ClientError
+
 import logging
 
 # Configure logging
@@ -22,8 +21,8 @@ class AWSClient:
             raise
 
     def get_cost_and_usage(self, start_date: str, end_date: str,
-                          granularity: str = 'DAILY',
-                          metrics: List[str] = None) -> Dict:
+                           granularity: str = 'DAILY',
+                           metrics: List[str] = None) -> Dict:
         """
         Get cost and usage data from AWS Cost Explorer.
 
@@ -54,7 +53,8 @@ class AWSClient:
                     }
                 ]
             )
-            logger.info(f"Successfully retrieved cost data for {start_date} to {end_date}")
+            logger.info(
+                f"Successfully retrieved cost data for {start_date} to {end_date}")
             return response
 
         except ClientError as e:
@@ -64,7 +64,11 @@ class AWSClient:
             logger.error(f"Unexpected error: {e}")
             raise
 
-    def get_dimension_values(self, dimension: str, start_date: str, end_date: str) -> List[str]:
+    def get_dimension_values(
+            self,
+            dimension: str,
+            start_date: str,
+            end_date: str) -> List[str]:
         """
         Get possible values for a dimension.
 
@@ -90,7 +94,11 @@ class AWSClient:
             logger.error(f"Failed to get dimension values: {e}")
             raise
 
-    def get_usage_forecast(self, start_date: str, end_date: str, metric: str = 'BLENDED_COST') -> Dict:
+    def get_usage_forecast(
+            self,
+            start_date: str,
+            end_date: str,
+            metric: str = 'BLENDED_COST') -> Dict:
         """
         Get usage forecast from AWS Cost Explorer.
 
@@ -111,7 +119,8 @@ class AWSClient:
                 Metric=metric,
                 Granularity='DAILY'
             )
-            logger.info(f"Successfully retrieved forecast data for {start_date} to {end_date}")
+            logger.info(
+                f"Successfully retrieved forecast data for {start_date} to {end_date}")
             return response
 
         except ClientError as e:
@@ -140,8 +149,12 @@ class AWSClient:
             logger.error(f"Failed to get cost categories: {e}")
             raise
 
-    def create_cost_budget_alert(self, budget_name: str, budget_limit: float,
-                                email_address: str, time_unit: str = 'MONTHLY') -> Dict:
+    def create_cost_budget_alert(
+            self,
+            budget_name: str,
+            budget_limit: float,
+            email_address: str,
+            time_unit: str = 'MONTHLY') -> Dict:
         """
         Create a cost budget with email alerts.
 
