@@ -1,7 +1,7 @@
 # test_expense_tracker.py - Fixed version
 import unittest
 from unittest.mock import patch, MagicMock
-from datetime import datetime, timedelta
+
 import json
 import tempfile
 import os

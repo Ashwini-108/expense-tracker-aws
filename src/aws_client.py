@@ -1,9 +1,9 @@
 # aws_client.py - Fixed version
 import boto3
-import json
-from typing import Dict, List, Optional
-from datetime import datetime, timedelta
-from botocore.exceptions import ClientError, BotoCoreError
+
+from typing import Dict, List
+
+from botocore.exceptions import ClientError
 import logging
 
 # Configure logging
