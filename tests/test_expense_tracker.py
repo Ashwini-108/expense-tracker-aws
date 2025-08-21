@@ -6,7 +6,7 @@ import json
 import tempfile
 import os
 from expense_tracker import ExpenseTracker
-from aws_client import AWSCostExplorer
+from aws_client import AWSClient
 
 
 class TestExpenseTracker(unittest.TestCase):
@@ -15,13 +15,14 @@ class TestExpenseTracker(unittest.TestCase):
         self.tracker = ExpenseTracker()
 
 
-class TestAWSCostExplorer(unittest.TestCase):
+class TestAWSClient(unittest.TestCase):
     @patch('boto3.client')
     def setUp(self, mock_boto_client):
         """Set up test fixtures with mocked AWS client."""
         self.mock_client = MagicMock()
         mock_boto_client.return_value = self.mock_client
-        self.cost_explorer = AWSCostExplorer()
+        self.cost_explorer = AWSClient()
+        self.tracker = ExpenseTracker()
 
     def test_add_manual_expense(self):
         """Test adding a manual expense."""

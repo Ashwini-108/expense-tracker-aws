@@ -1,9 +1,7 @@
 # Environment variables (NEVER commit these)
 .env
 .env.*
-.env.local
-.env.backup
-.env.template
+
 
 # Python cache
 __pycache__/

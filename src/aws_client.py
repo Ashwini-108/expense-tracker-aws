@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class AWSCostExplorer:
+class AWSClient:
     def __init__(self, region_name: str = 'us-east-1'):
         """Initialize AWS Cost Explorer client."""
         try:

@@ -10,13 +10,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Module level imports should be at the top
-from aws_client import AWSCostExplorer
+from aws_client import AWSClient
 
 
 class ExpenseTracker:
     def __init__(self, aws_region: str = 'us-east-1'):
         """Initialize the expense tracker with AWS Cost Explorer."""
-        self.cost_explorer = AWSCostExplorer(region_name=aws_region)
+        self.cost_explorer = AWSClient(region_name=aws_region)
         self.expenses_data = []
 
     def add_manual_expense(self, amount: float, category: str, description: str,
