@@ -1,193 +1,197 @@
-"""
-AWS Client Module
-Handles all AWS operations - S3 file storage and CloudWatch logging
-"""
-
+# aws_client.py - Fixed version
 import boto3
 import json
-import os
-from datetime import datetime
-from botocore.exceptions import ClientError, NoCredentialsError
+from typing import Dict, List, Optional
+from datetime import datetime, timedelta
+from botocore.exceptions import ClientError, BotoCoreError
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-class AWSClient:
-    """
-    Manages AWS S3 and CloudWatch operations for the expense tracker
-    """
-    
-    def __init__(self):
-        """Initialize AWS clients and configuration"""
+class AWSCostExplorer:
+    def __init__(self, region_name: str = 'us-east-1'):
+        """Initialize AWS Cost Explorer client."""
         try:
-            # Get configuration from environment variables
-            self.aws_region = os.getenv('AWS_REGION', 'us-east-1')
-            self.s3_bucket = os.getenv('S3_BUCKET_NAME')
-            self.log_group = os.getenv('CLOUDWATCH_LOG_GROUP', 'expense-tracker-logs')
-            
-            # Validate required environment variables
-            if not self.s3_bucket:
-                raise ValueError("S3_BUCKET_NAME environment variable is required")
-            
-            # Initialize AWS clients
-            self.s3_client = boto3.client('s3', region_name=self.aws_region)
-            self.cloudwatch_client = boto3.client('logs', region_name=self.aws_region)
-            
-            # Ensure CloudWatch log group exists
-            self._create_log_group_if_not_exists()
-            
-        except NoCredentialsError:
-            raise Exception("AWS credentials not found. Please check your .env file.")
+            self.client = boto3.client('ce', region_name=region_name)
+            logger.info("AWS Cost Explorer client initialized successfully")
         except Exception as e:
-            raise Exception(f"Failed to initialize AWS client: {str(e)}")
-    
-    def _create_log_group_if_not_exists(self):
-        """Create CloudWatch log group if it doesn't exist"""
+            logger.error(f"Failed to initialize AWS client: {e}")
+            raise
+
+    def get_cost_and_usage(self, start_date: str, end_date: str,
+                          granularity: str = 'DAILY',
+                          metrics: List[str] = None) -> Dict:
+        """
+        Get cost and usage data from AWS Cost Explorer.
+
+        Args:
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+            granularity: DAILY, MONTHLY, or HOURLY
+            metrics: List of metrics to retrieve
+
+        Returns:
+            Dictionary containing cost and usage data
+        """
+        if metrics is None:
+            metrics = ['BlendedCost', 'UsageQuantity']
+
         try:
-            self.cloudwatch_client.create_log_group(logGroupName=self.log_group)
-            print(f"Created CloudWatch log group: {self.log_group}")
+            response = self.client.get_cost_and_usage(
+                TimePeriod={
+                    'Start': start_date,
+                    'End': end_date
+                },
+                Granularity=granularity,
+                Metrics=metrics,
+                GroupBy=[
+                    {
+                        'Type': 'DIMENSION',
+                        'Key': 'SERVICE'
+                    }
+                ]
+            )
+            logger.info(f"Successfully retrieved cost data for {start_date} to {end_date}")
+            return response
+
         except ClientError as e:
-            if e.response['Error']['Code'] != 'ResourceAlreadyExistsException':
-                raise e
-            # Log group already exists, which is fine
-    
-    def upload_expenses_to_s3(self, expenses_data, user_id="default"):
-        """
-        Upload expenses data to S3 as JSON file
-        
-        Args:
-            expenses_data (list): List of expense dictionaries
-            user_id (str): User identifier for file naming
-        
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            # Convert expenses to JSON string
-            json_data = json.dumps(expenses_data, indent=2, default=str)
-            
-            # Create file key (path) in S3
-            file_key = f"expenses/{user_id}/expenses.json"
-            
-            # Upload to S3
-            self.s3_client.put_object(
-                Bucket=self.s3_bucket,
-                Key=file_key,
-                Body=json_data,
-                ContentType='application/json'
-            )
-            
-            # Log the action
-            self.log_action("UPLOAD", f"Uploaded expenses for user {user_id} to S3")
-            return True
-            
+            logger.error(f"AWS API error: {e}")
+            raise
         except Exception as e:
-            self.log_action("ERROR", f"Failed to upload to S3: {str(e)}")
-            return False
-    
-    def download_expenses_from_s3(self, user_id="default"):
+            logger.error(f"Unexpected error: {e}")
+            raise
+
+    def get_dimension_values(self, dimension: str, start_date: str, end_date: str) -> List[str]:
         """
-        Download expenses data from S3
-        
+        Get possible values for a dimension.
+
         Args:
-            user_id (str): User identifier
-            
+            dimension: The dimension to get values for (e.g., 'SERVICE', 'LINKED_ACCOUNT')
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+
         Returns:
-            list: List of expenses or empty list if file doesn't exist
+            List of dimension values
         """
         try:
-            file_key = f"expenses/{user_id}/expenses.json"
-            
-            # Download from S3
-            response = self.s3_client.get_object(
-                Bucket=self.s3_bucket,
-                Key=file_key
+            response = self.client.get_dimension_values(
+                TimePeriod={
+                    'Start': start_date,
+                    'End': end_date
+                },
+                Dimension=dimension
             )
-            
-            # Parse JSON data
-            json_data = response['Body'].read().decode('utf-8')
-            expenses = json.loads(json_data)
-            
-            self.log_action("DOWNLOAD", f"Downloaded expenses for user {user_id} from S3")
-            return expenses
-            
+            return [item['Value'] for item in response['DimensionValues']]
+
         except ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchKey':
-                # File doesn't exist yet, return empty list
-                self.log_action("INFO", f"No expenses file found for user {user_id}, returning empty list")
-                return []
-            else:
-                self.log_action("ERROR", f"Failed to download from S3: {str(e)}")
-                return []
-        except Exception as e:
-            self.log_action("ERROR", f"Failed to download from S3: {str(e)}")
-            return []
-    
-    def log_action(self, level, message):
+            logger.error(f"Failed to get dimension values: {e}")
+            raise
+
+    def get_usage_forecast(self, start_date: str, end_date: str, metric: str = 'BLENDED_COST') -> Dict:
         """
-        Log action to CloudWatch Logs
-        
+        Get usage forecast from AWS Cost Explorer.
+
         Args:
-            level (str): Log level (INFO, ERROR, WARNING, etc.)
-            message (str): Log message
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+            metric: Metric to forecast
+
+        Returns:
+            Dictionary containing forecast data
         """
         try:
-            # Create log stream name with current date
-            log_stream = f"expense-tracker-{datetime.now().strftime('%Y-%m-%d')}"
-            
-            # Try to create log stream (it's okay if it already exists)
-            try:
-                self.cloudwatch_client.create_log_stream(
-                    logGroupName=self.log_group,
-                    logStreamName=log_stream
-                )
-            except ClientError as e:
-                if e.response['Error']['Code'] != 'ResourceAlreadyExistsException':
-                    raise e
-            
-            # Create log event
-            log_event = {
-                'timestamp': int(datetime.now().timestamp() * 1000),  # CloudWatch expects milliseconds
-                'message': f"[{level}] {datetime.now().isoformat()} - {message}"
-            }
-            
-            # Put log event
-            self.cloudwatch_client.put_log_events(
-                logGroupName=self.log_group,
-                logStreamName=log_stream,
-                logEvents=[log_event]
+            response = self.client.get_usage_forecast(
+                TimePeriod={
+                    'Start': start_date,
+                    'End': end_date
+                },
+                Metric=metric,
+                Granularity='DAILY'
             )
-            
-        except Exception as e:
-            print(f"Failed to log to CloudWatch: {str(e)}")
-            # Don't raise exception - logging failure shouldn't break the app
-    
-    def test_connection(self):
+            logger.info(f"Successfully retrieved forecast data for {start_date} to {end_date}")
+            return response
+
+        except ClientError as e:
+            logger.error(f"Failed to get usage forecast: {e}")
+            raise
+
+    def get_rightsizing_recommendation(self) -> Dict:
+        """Get rightsizing recommendations."""
+        try:
+            response = self.client.get_rightsizing_recommendation(
+                Service='AmazonEC2'
+            )
+            return response
+
+        except ClientError as e:
+            logger.error(f"Failed to get rightsizing recommendations: {e}")
+            raise
+
+    def get_cost_categories(self) -> List[Dict]:
+        """Get all cost categories."""
+        try:
+            response = self.client.list_cost_category_definitions()
+            return response['CostCategoryReferences']
+
+        except ClientError as e:
+            logger.error(f"Failed to get cost categories: {e}")
+            raise
+
+    def create_cost_budget_alert(self, budget_name: str, budget_limit: float,
+                                email_address: str, time_unit: str = 'MONTHLY') -> Dict:
         """
-        Test AWS connections
-        
+        Create a cost budget with email alerts.
+
+        Args:
+            budget_name: Name for the budget
+            budget_limit: Budget limit amount
+            email_address: Email address for notifications
+            time_unit: MONTHLY, QUARTERLY, or ANNUALLY
+
         Returns:
-            dict: Status of S3 and CloudWatch connections
+            Dictionary containing budget creation response
         """
-        status = {
-            's3': False,
-            'cloudwatch': False,
-            'errors': []
+        budgets_client = boto3.client('budgets')
+
+        budget = {
+            'BudgetName': budget_name,
+            'BudgetLimit': {
+                'Amount': str(budget_limit),
+                'Unit': 'USD'
+            },
+            'TimeUnit': time_unit,
+            'BudgetType': 'COST'
         }
-        
-        # Test S3 connection
+
+        notification = {
+            'NotificationType': 'ACTUAL',
+            'ComparisonOperator': 'GREATER_THAN',
+            'Threshold': 80.0,
+            'ThresholdType': 'PERCENTAGE'
+        }
+
+        subscriber = {
+            'SubscriptionType': 'EMAIL',
+            'Address': email_address
+        }
+
         try:
-            self.s3_client.head_bucket(Bucket=self.s3_bucket)
-            status['s3'] = True
-        except Exception as e:
-            status['errors'].append(f"S3 Error: {str(e)}")
-        
-        # Test CloudWatch connection
-        try:
-            self.cloudwatch_client.describe_log_groups(
-                logGroupNamePrefix=self.log_group,
-                limit=1
+            response = budgets_client.create_budget(
+                AccountId='123456789012',  # Replace with actual account ID
+                Budget=budget,
+                NotificationsWithSubscribers=[
+                    {
+                        'Notification': notification,
+                        'Subscribers': [subscriber]
+                    }
+                ]
             )
-            status['cloudwatch'] = True
-        except Exception as e:
-            status['errors'].append(f"CloudWatch Error: {str(e)}")
-        
-        return status
+            logger.info(f"Budget '{budget_name}' created successfully")
+            return response
+
+        except ClientError as e:
+            logger.error(f"Failed to create budget: {e}")
+            raise

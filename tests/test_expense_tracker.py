@@ -1,116 +1,117 @@
-"""
-Tests for the Expense Tracker application
-"""
-
-import pytest
+# test_expense_tracker.py - Fixed version
+import unittest
+from unittest.mock import patch, MagicMock
+from datetime import datetime, timedelta
+import json
+import tempfile
 import os
-import sys
-from unittest.mock import Mock, patch
+from expense_tracker import ExpenseTracker
+from aws_client import AWSCostExplorer
 
-# Add the src directory to the Python path for testing
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-def test_basic_functionality():
-    """Basic test to ensure the test framework is working"""
-    assert True
+class TestExpenseTracker(unittest.TestCase):
+    def setUp(self):
+        """Set up test fixtures."""
+        self.tracker = ExpenseTracker()
 
-def test_math_operations():
-    """Test basic math operations used in expense calculations"""
-    # Test expense amount calculations
-    amount1 = 4.50
-    amount2 = 15.75
-    total = amount1 + amount2
-    assert total == 20.25
-    
-    # Test rounding
-    amount3 = 4.567
-    rounded_amount = round(amount3, 2)
-    assert rounded_amount == 4.57
 
-@patch.dict(os.environ, {
-    'AWS_REGION': 'us-east-1',
-    'S3_BUCKET_NAME': 'test-bucket',
-    'CLOUDWATCH_LOG_GROUP': 'test-logs'
-})
-def test_environment_variables():
-    """Test that environment variables can be read"""
-    assert os.getenv('S3_BUCKET_NAME') == 'test-bucket'
-    assert os.getenv('AWS_REGION') == 'us-east-1'
-    assert os.getenv('CLOUDWATCH_LOG_GROUP') == 'test-logs'
+class TestAWSCostExplorer(unittest.TestCase):
+    @patch('boto3.client')
+    def setUp(self, mock_boto_client):
+        """Set up test fixtures with mocked AWS client."""
+        self.mock_client = MagicMock()
+        mock_boto_client.return_value = self.mock_client
+        self.cost_explorer = AWSCostExplorer()
 
-def test_expense_data_structure():
-    """Test expense data structure"""
-    expense = {
-        'id': 1,
-        'description': 'Test Coffee',
-        'amount': 4.50,
-        'category': 'Food',
-        'date': '2024-01-15 10:30:45'
-    }
-    
-    assert expense['id'] == 1
-    assert expense['description'] == 'Test Coffee'
-    assert expense['amount'] == 4.50
-    assert expense['category'] == 'Food'
-    assert 'date' in expense
+    def test_add_manual_expense(self):
+        """Test adding a manual expense."""
+        result = self.tracker.add_manual_expense(
+            amount=50.0,
+            category='Food',
+            description='Lunch'
+        )
+        self.assertTrue(result)
+        self.assertEqual(len(self.tracker.expenses_data), 1)
+        self.assertEqual(self.tracker.expenses_data[0]['amount'], 50.0)
 
-def test_expense_validation():
-    """Test expense validation logic"""
-    # Valid expense data
-    valid_amount = 10.50
-    valid_description = "Valid expense"
-    
-    assert valid_amount > 0
-    assert len(valid_description.strip()) > 0
-    
-    # Invalid expense data
-    invalid_amount = -5.0
-    invalid_description = ""
-    
-    assert invalid_amount <= 0
-    assert len(invalid_description.strip()) == 0
 
-def test_category_filtering():
-    """Test category filtering functionality"""
-    expenses = [
-        {'id': 1, 'category': 'Food', 'amount': 10.0},
-        {'id': 2, 'category': 'Transport', 'amount': 15.0},
-        {'id': 3, 'category': 'Food', 'amount': 8.0},
-    ]
-    
-    # Filter by Food category
-    food_expenses = [exp for exp in expenses if exp['category'].lower() == 'food']
-    assert len(food_expenses) == 2
-    
-    # Filter by Transport category
-    transport_expenses = [exp for exp in expenses if exp['category'].lower() == 'transport']
-    assert len(transport_expenses) == 1
+class TestExpenseAnalysis(unittest.TestCase):
+    def setUp(self):
+        """Set up test data."""
+        self.tracker = ExpenseTracker()
+        # Add test data
+        self.tracker.add_manual_expense(100.0, 'Food', 'Groceries', '2024-01-01')
+        self.tracker.add_manual_expense(50.0, 'Transport', 'Gas', '2024-01-02')
 
-def test_summary_calculations():
-    """Test expense summary calculations"""
-    expenses = [
-        {'id': 1, 'category': 'Food', 'amount': 10.0},
-        {'id': 2, 'category': 'Transport', 'amount': 15.0},
-        {'id': 3, 'category': 'Food', 'amount': 8.0},
-    ]
-    
-    # Calculate total
-    total_amount = sum(exp['amount'] for exp in expenses)
-    assert total_amount == 33.0
-    
-    # Count by category
-    categories = {}
-    for expense in expenses:
-        category = expense['category']
-        if category not in categories:
-            categories[category] = {'count': 0, 'amount': 0}
-        categories[category]['count'] += 1
-        categories[category]['amount'] += expense['amount']
-    
-    assert categories['Food']['count'] == 2
-    assert categories['Food']['amount'] == 18.0
-    assert categories['Transport']['count'] == 1
-    assert categories['Transport']['amount'] == 15.0
+    def test_analyze_spending_patterns(self):
+        """Test spending pattern analysis."""
+        analysis = self.tracker.analyze_spending_patterns()
+        self.assertIn('total_expenses', analysis)
+        self.assertIn('category_breakdown', analysis)
+        self.assertEqual(analysis['total_expenses'], 150.0)
+
+
+class TestReportGeneration(unittest.TestCase):
+    def setUp(self):
+        """Set up test data."""
+        self.tracker = ExpenseTracker()
+        self.tracker.add_manual_expense(100.0, 'Food', 'Test expense')
+
+    def test_generate_json_report(self):
+        """Test JSON report generation."""
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+            temp_filename = f.name
+
+        try:
+            result = self.tracker.generate_expense_report('json', temp_filename)
+            self.assertEqual(result, temp_filename)
+            self.assertTrue(os.path.exists(temp_filename))
+
+            # Verify content
+            with open(temp_filename, 'r') as f:
+                data = json.load(f)
+            self.assertEqual(len(data), 1)
+            self.assertEqual(data[0]['amount'], 100.0)
+
+        finally:
+            if os.path.exists(temp_filename):
+                os.unlink(temp_filename)
+
+
+class TestAWSIntegration(unittest.TestCase):
+    @patch('boto3.client')
+    def setUp(self, mock_boto_client):
+        """Set up mocked AWS integration tests."""
+        self.mock_client = MagicMock()
+        mock_boto_client.return_value = self.mock_client
+        self.tracker = ExpenseTracker()
+
+    def test_fetch_aws_costs_success(self):
+        """Test successful AWS cost fetching."""
+        # Mock response
+        mock_response = {
+            'ResultsByTime': [
+                {
+                    'TimePeriod': {'Start': '2024-01-01', 'End': '2024-01-02'},
+                    'Groups': [
+                        {
+                            'Keys': ['Amazon EC2-Instance'],
+                            'Metrics': {
+                                'BlendedCost': {'Amount': '10.50', 'Unit': 'USD'}
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+
+        self.tracker.cost_explorer.client.get_cost_and_usage.return_value = mock_response
+        result = self.tracker.fetch_aws_costs(days_back=1)
+
+        self.assertIn('daily_costs', result)
+        self.assertIn('service_costs', result)
+        self.assertIn('total_cost', result)
+
 
 if __name__ == '__main__':
-    pytest.main(['-v', __file__])
+    unittest.main()

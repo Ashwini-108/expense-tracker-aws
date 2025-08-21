@@ -1,332 +1,218 @@
-"""
-Expense Tracker CLI Application
-Main application logic for managing expenses
-"""
+# expense_tracker.py - Fixed version
+import json
+import csv
+from datetime import datetime, timedelta
+from typing import Dict, Optional
+import boto3
+from botocore.exceptions import ClientError
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-import os
-import sys
-from datetime import datetime
-from typing import List, Dict, Optional
-import click
-from dotenv import load_dotenv
-
-# Add the src directory to the Python path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from aws_client import AWSClient
+# Module level imports should be at the top
+from aws_client import AWSCostExplorer
 
 
 class ExpenseTracker:
-    """
-    Main expense tracker class that handles all expense operations
-    """
-    
-    def __init__(self):
-        """Initialize the expense tracker with AWS client"""
-        try:
-            # Load environment variables from .env file
-            load_dotenv()
-            
-            # Initialize AWS client
-            self.aws_client = AWSClient()
-            self.user_id = "default"  # In a real app, this would be user login
-            
-            # Load existing expenses from S3
-            self.expenses = self.aws_client.download_expenses_from_s3(self.user_id)
-            
-            print("✅ Expense Tracker initialized successfully!")
-            
-        except Exception as e:
-            print(f"❌ Failed to initialize Expense Tracker: {str(e)}")
-            sys.exit(1)
-    
-    def add_expense(self, description: str, amount: float, category: str = "Other") -> bool:
+    def __init__(self, aws_region: str = 'us-east-1'):
+        """Initialize the expense tracker with AWS Cost Explorer."""
+        self.cost_explorer = AWSCostExplorer(region_name=aws_region)
+        self.expenses_data = []
+
+    def add_manual_expense(self, amount: float, category: str, description: str,
+                          date: str = None) -> bool:
         """
-        Add a new expense
-        
+        Add a manual expense entry.
+
         Args:
-            description (str): What you spent money on
-            amount (float): How much you spent
-            category (str): Category of expense
-            
+            amount: Expense amount
+            category: Expense category
+            description: Expense description
+            date: Date in YYYY-MM-DD format (defaults to today)
+
         Returns:
-            bool: True if successful
+            True if successful, False otherwise
         """
-        try:
-            # Validate input
-            if amount <= 0:
-                print("❌ Amount must be greater than 0")
-                return False
-            
-            if not description.strip():
-                print("❌ Description cannot be empty")
-                return False
-            
-            # Create expense object
-            expense = {
-                'id': len(self.expenses) + 1,  # Simple ID generation
-                'description': description.strip(),
-                'amount': round(amount, 2),  # Round to 2 decimal places
-                'category': category.strip(),
-                'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'created_at': datetime.now().isoformat()
-            }
-            
-            # Add to local list
-            self.expenses.append(expense)
-            
-            # Save to S3
-            if self.aws_client.upload_expenses_to_s3(self.expenses, self.user_id):
-                self.aws_client.log_action(
-                    "ADD_EXPENSE", 
-                    f"Added expense: {description} - ${amount} ({category})"
-                )
-                print(f"✅ Expense added successfully!")
-                print(f"   💰 ${amount} for '{description}' in category '{category}'")
-                return True
-            else:
-                # Remove from local list if S3 upload failed
-                self.expenses.pop()
-                print("❌ Failed to save expense to cloud storage")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Error adding expense: {str(e)}")
-            return False
-    
-    def view_expenses(self, category_filter: Optional[str] = None) -> None:
+        if date is None:
+            date = datetime.now().strftime('%Y-%m-%d')
+
+        expense = {
+            'date': date,
+            'amount': amount,
+            'category': category,
+            'description': description,
+            'source': 'manual'
+        }
+
+        self.expenses_data.append(expense)
+        return True
+
+    def fetch_aws_costs(self, days_back: int = 30) -> Dict:
         """
-        Display all expenses or filtered by category
-        
+        Fetch AWS costs for the specified number of days.
+
         Args:
-            category_filter (str, optional): Filter by this category
+            days_back: Number of days to look back
+
+        Returns:
+            Dictionary containing AWS cost data
         """
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days_back)
+
+        start_str = start_date.strftime('%Y-%m-%d')
+        end_str = end_date.strftime('%Y-%m-%d')
+
         try:
-            if not self.expenses:
-                print("📝 No expenses found. Add your first expense!")
-                return
-            
-            # Filter expenses if category specified
-            if category_filter:
-                filtered_expenses = [
-                    exp for exp in self.expenses 
-                    if exp['category'].lower() == category_filter.lower()
-                ]
-                if not filtered_expenses:
-                    print(f"📝 No expenses found in category '{category_filter}'")
-                    return
-                expenses_to_show = filtered_expenses
-                print(f"\n💰 Expenses in category '{category_filter}':")
-            else:
-                expenses_to_show = self.expenses
-                print(f"\n💰 All Expenses ({len(self.expenses)} total):")
-            
-            # Display expenses in a nice format
-            total = 0
-            print("-" * 80)
-            print(f"{'ID':<4} {'Date':<12} {'Amount':<10} {'Category':<15} {'Description'}")
-            print("-" * 80)
-            
-            for expense in expenses_to_show:
-                print(f"{expense['id']:<4} "
-                      f"{expense['date'][:10]:<12} "
-                      f"${expense['amount']:<9.2f} "
-                      f"{expense['category']:<15} "
-                      f"{expense['description']}")
-                total += expense['amount']
-            
-            print("-" * 80)
-            print(f"{'Total:':<31} ${total:.2f}")
-            
-            # Log the view action
-            self.aws_client.log_action(
-                "VIEW_EXPENSES", 
-                f"Viewed expenses, filter: {category_filter or 'None'}, count: {len(expenses_to_show)}"
+            cost_data = self.cost_explorer.get_cost_and_usage(
+                start_date=start_str,
+                end_date=end_str,
+                granularity='DAILY'
             )
-            
+
+            # Process the AWS cost data
+            processed_costs = self._process_aws_cost_data(cost_data)
+            return processed_costs
+
         except Exception as e:
-            print(f"❌ Error viewing expenses: {str(e)}")
-    
-    def delete_expense(self, expense_id: int) -> bool:
-        """
-        Delete an expense by ID
-        
-        Args:
-            expense_id (int): ID of expense to delete
-            
-        Returns:
-            bool: True if successful
-        """
-        try:
-            # Find expense with matching ID
-            expense_to_delete = None
-            for i, expense in enumerate(self.expenses):
-                if expense['id'] == expense_id:
-                    expense_to_delete = self.expenses.pop(i)
-                    break
-            
-            if not expense_to_delete:
-                print(f"❌ No expense found with ID {expense_id}")
-                return False
-            
-            # Save updated list to S3
-            if self.aws_client.upload_expenses_to_s3(self.expenses, self.user_id):
-                self.aws_client.log_action(
-                    "DELETE_EXPENSE", 
-                    f"Deleted expense ID {expense_id}: {expense_to_delete['description']} - ${expense_to_delete['amount']}"
-                )
-                print(f"✅ Expense deleted successfully!")
-                print(f"   🗑️ Removed: {expense_to_delete['description']} - ${expense_to_delete['amount']}")
-                return True
-            else:
-                # Re-add expense if S3 upload failed
-                self.expenses.append(expense_to_delete)
-                print("❌ Failed to delete expense from cloud storage")
-                return False
-                
-        except Exception as e:
-            print(f"❌ Error deleting expense: {str(e)}")
-            return False
-    
-    def get_expense_summary(self) -> Dict:
-        """
-        Get summary statistics of expenses
-        
-        Returns:
-            dict: Summary data
-        """
-        try:
-            if not self.expenses:
-                return {
-                    'total_expenses': 0,
-                    'total_amount': 0,
-                    'categories': {},
-                    'recent_expenses': []
-                }
-            
-            # Calculate totals
-            total_amount = sum(exp['amount'] for exp in self.expenses)
-            
-            # Group by categories
-            categories = {}
-            for expense in self.expenses:
-                category = expense['category']
-                if category not in categories:
-                    categories[category] = {'count': 0, 'amount': 0}
-                categories[category]['count'] += 1
-                categories[category]['amount'] += expense['amount']
-            
-            # Get recent expenses (last 5)
-            recent_expenses = sorted(
-                self.expenses, 
-                key=lambda x: x['created_at'], 
-                reverse=True
-            )[:5]
-            
-            summary = {
-                'total_expenses': len(self.expenses),
-                'total_amount': round(total_amount, 2),
-                'categories': categories,
-                'recent_expenses': recent_expenses
-            }
-            
-            self.aws_client.log_action("VIEW_SUMMARY", "Generated expense summary")
-            return summary
-            
-        except Exception as e:
-            print(f"❌ Error generating summary: {str(e)}")
+            print(f"Error fetching AWS costs: {e}")
             return {}
-    
-    def display_summary(self) -> None:
-        """Display formatted expense summary"""
-        summary = self.get_expense_summary()
-        
-        if not summary:
+
+    def _process_aws_cost_data(self, cost_data: Dict) -> Dict:
+        """Process raw AWS cost data into a more usable format."""
+        processed = {
+            'daily_costs': [],
+            'service_costs': {},
+            'total_cost': 0
+        }
+
+        if 'ResultsByTime' not in cost_data:
+            return processed
+
+        for result in cost_data['ResultsByTime']:
+            date = result['TimePeriod']['Start']
+            daily_total = 0
+
+            for group in result['Groups']:
+                service = group['Keys'][0]
+                cost = float(group['Metrics']['BlendedCost']['Amount'])
+
+                if service not in processed['service_costs']:
+                    processed['service_costs'][service] = 0
+                processed['service_costs'][service] += cost
+                daily_total += cost
+
+            processed['daily_costs'].append({
+                'date': date,
+                'amount': daily_total
+            })
+            processed['total_cost'] += daily_total
+
+        return processed
+
+    def generate_expense_report(self, output_format: str = 'json',
+                               filename: str = None) -> str:
+        """
+        Generate an expense report.
+
+        Args:
+            output_format: 'json' or 'csv'
+            filename: Output filename (optional)
+
+        Returns:
+            String representation of the report or filename if saved
+        """
+        if not filename:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"expense_report_{timestamp}.{output_format}"
+
+        try:
+            if output_format.lower() == 'json':
+                with open(filename, 'w') as f:
+                    json.dump(self.expenses_data, f, indent=2)
+            elif output_format.lower() == 'csv':
+                if self.expenses_data:
+                    df = pd.DataFrame(self.expenses_data)
+                    df.to_csv(filename, index=False)
+                else:
+                    # Create empty CSV with headers
+                    with open(filename, 'w', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(['date', 'amount', 'category', 'description', 'source'])
+
+            return filename
+
+        except Exception as e:
+            print(f"Error generating report: {e}")
+            return ""
+
+    def analyze_spending_patterns(self) -> Dict:
+        """Analyze spending patterns from the collected data."""
+        if not self.expenses_data:
+            return {'message': 'No expense data available for analysis'}
+
+        df = pd.DataFrame(self.expenses_data)
+        df['date'] = pd.to_datetime(df['date'])
+        df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
+
+        analysis = {
+            'total_expenses': df['amount'].sum(),
+            'average_daily_spend': df.groupby(df['date'].dt.date)['amount'].sum().mean(),
+            'category_breakdown': df.groupby('category')['amount'].sum().to_dict(),
+            'highest_expense_day': df.groupby(df['date'].dt.date)['amount'].sum().idxmax(),
+            'expense_trend': self._calculate_trend(df)
+        }
+
+        return analysis
+
+    def _calculate_trend(self, df: pd.DataFrame) -> str:
+        """Calculate spending trend over time."""
+        daily_totals = df.groupby(df['date'].dt.date)['amount'].sum()
+        if len(daily_totals) < 2:
+            return 'insufficient_data'
+
+        recent_avg = daily_totals.tail(7).mean()
+        older_avg = daily_totals.head(7).mean()
+
+        if recent_avg > older_avg * 1.1:
+            return 'increasing'
+        elif recent_avg < older_avg * 0.9:
+            return 'decreasing'
+        else:
+            return 'stable'
+
+    def create_visualization(self, chart_type: str = 'daily', save_path: str = None):
+        """
+        Create visualizations of expense data.
+
+        Args:
+            chart_type: 'daily', 'category', or 'trend'
+            save_path: Path to save the chart (optional)
+        """
+        if not self.expenses_data:
+            print("No data available for visualization")
             return
-        
-        print("\n📊 Expense Summary:")
-        print("-" * 50)
-        print(f"Total Expenses: {summary['total_expenses']}")
-        print(f"Total Amount: ${summary['total_amount']:.2f}")
-        
-        if summary['categories']:
-            print("\n📂 By Category:")
-            for category, data in summary['categories'].items():
-                print(f"  • {category}: {data['count']} expenses, ${data['amount']:.2f}")
-        
-        if summary['recent_expenses']:
-            print("\n🕒 Recent Expenses:")
-            for expense in summary['recent_expenses']:
-                print(f"  • {expense['date'][:10]} - {expense['description']} (${expense['amount']:.2f})")
 
+        df = pd.DataFrame(self.expenses_data)
+        df['date'] = pd.to_datetime(df['date'])
+        df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
 
-# CLI Commands using Click
-@click.group()
-@click.pass_context
-def cli(ctx):
-    """💰 Expense Tracker - Manage your expenses in the cloud!"""
-    try:
-        ctx.ensure_object(dict)
-        ctx.obj['tracker'] = ExpenseTracker()
-    except Exception as e:
-        print(f"Failed to initialize: {e}")
-        sys.exit(1)
+        plt.figure(figsize=(12, 6))
 
+        if chart_type == 'daily':
+            daily_totals = df.groupby(df['date'].dt.date)['amount'].sum()
+            plt.plot(daily_totals.index, daily_totals.values, marker='o')
+            plt.title('Daily Expenses')
+            plt.xlabel('Date')
+            plt.ylabel('Amount ($)')
+            plt.xticks(rotation=45)
 
-@cli.command()
-@click.argument('description')
-@click.argument('amount', type=float)
-@click.option('--category', '-c', default='Other', help='Expense category')
-@click.pass_context
-def add(ctx, description, amount, category):
-    """Add a new expense. Example: add "Coffee" 4.50 --category Food"""
-    tracker = ctx.obj['tracker']
-    tracker.add_expense(description, amount, category)
+        elif chart_type == 'category':
+            category_totals = df.groupby('category')['amount'].sum()
+            plt.pie(category_totals.values, labels=category_totals.index, autopct='%1.1f%%')
+            plt.title('Expenses by Category')
 
-
-@cli.command()
-@click.option('--category', '-c', help='Filter by category')
-@click.pass_context
-def view(ctx, category):
-    """View all expenses or filter by category"""
-    tracker = ctx.obj['tracker']
-    tracker.view_expenses(category)
-
-
-@cli.command()
-@click.argument('expense_id', type=int)
-@click.pass_context
-def delete(ctx, expense_id):
-    """Delete an expense by ID"""
-    tracker = ctx.obj['tracker']
-    tracker.delete_expense(expense_id)
-
-
-@cli.command()
-@click.pass_context
-def summary(ctx):
-    """Show expense summary and statistics"""
-    tracker = ctx.obj['tracker']
-    tracker.display_summary()
-
-
-@cli.command()
-@click.pass_context
-def test(ctx):
-    """Test AWS connections"""
-    tracker = ctx.obj['tracker']
-    status = tracker.aws_client.test_connection()
-    
-    print("\n🔍 AWS Connection Test:")
-    print("-" * 30)
-    print(f"S3 Connection: {'✅' if status['s3'] else '❌'}")
-    print(f"CloudWatch Connection: {'✅' if status['cloudwatch'] else '❌'}")
-    
-    if status['errors']:
-        print("\nErrors:")
-        for error in status['errors']:
-            print(f"  • {error}")
-
-
-if __name__ == '__main__':
-    cli()
+        elif chart_type == 'trend':
+            df_monthly = df.groupby(df['date'].dt.to_period('M'))['amount'].sum()
+            plt.bar(range(len(df_monthly)), df_monthly.values)
+            plt.title('Monthly Expense Trends')
