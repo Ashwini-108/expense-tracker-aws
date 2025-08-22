@@ -41,7 +41,8 @@ class TestExpenseAnalysis(unittest.TestCase):
         """Set up test data."""
         self.tracker = ExpenseTracker()
         # Add test data
-        self.tracker.add_manual_expense(100.0, 'Food', 'Groceries', '2024-01-01')
+        self.tracker.add_manual_expense(
+            100.0, 'Food', 'Groceries', '2024-01-01')
         self.tracker.add_manual_expense(50.0, 'Transport', 'Gas', '2024-01-02')
 
     def test_analyze_spending_patterns(self):
@@ -64,7 +65,8 @@ class TestReportGeneration(unittest.TestCase):
             temp_filename = f.name
 
         try:
-            result = self.tracker.generate_expense_report('json', temp_filename)
+            result = self.tracker.generate_expense_report(
+                'json', temp_filename)
             self.assertEqual(result, temp_filename)
             self.assertTrue(os.path.exists(temp_filename))
 
@@ -93,18 +95,16 @@ class TestAWSIntegration(unittest.TestCase):
         mock_response = {
             'ResultsByTime': [
                 {
-                    'TimePeriod': {'Start': '2024-01-01', 'End': '2024-01-02'},
+                    'TimePeriod': {
+                        'Start': '2024-01-01',
+                        'End': '2024-01-02'},
                     'Groups': [
                         {
                             'Keys': ['Amazon EC2-Instance'],
                             'Metrics': {
-                                'BlendedCost': {'Amount': '10.50', 'Unit': 'USD'}
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
+                                'BlendedCost': {
+                                    'Amount': '10.50',
+                                    'Unit': 'USD'}}}]}]}
 
         self.tracker.cost_explorer.client.get_cost_and_usage.return_value = mock_response
         result = self.tracker.fetch_aws_costs(days_back=1)
